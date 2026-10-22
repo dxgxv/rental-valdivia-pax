@@ -1,6 +1,7 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
+import os
 from datetime import datetime
 
 # ==========================================
@@ -131,6 +132,13 @@ def calcular_semaforo(fila):
     else:
         return "🟢 OPERATIVA (LISTA)"
 
+def obtener_gemini_key():
+    """Obtiene la API key de Gemini desde secrets de Streamlit o variable de entorno."""
+    try:
+        return st.secrets["GEMINI_API_KEY"]
+    except Exception:
+        return os.environ.get("GEMINI_API_KEY", "")
+
 # Inicializar la base de datos al arrancar
 inicializar_db()
 df_equipos = obtener_equipos()
@@ -203,11 +211,12 @@ if modo_vista == "📱 1. Escáner NFC / Ficha Taller":
     st.divider()
 
     # Pestañas operativas de 15 segundos
-    tab_recepcion, tab_taller, tab_despacho, tab_hist = st.tabs([
+    tab_recepcion, tab_taller, tab_despacho, tab_hist, tab_ia = st.tabs([
         "📥 1. Recepción de Arriendo (Patio)",
         "🛠️ 2. Liberación de Taller (Mecánico)",
         "🚚 3. Salida a Arriendo",
-        "📋 Historial del Equipo"
+        "📋 Historial del Equipo",
+        "🤖 Asistente IA (Gemini)"
     ])
 
     # --- PESTAÑA 1: RECEPCIÓN EN PATIO ---
@@ -333,6 +342,77 @@ if modo_vista == "📱 1. Escáner NFC / Ficha Taller":
         df_h = obtener_historial()
         df_h_maq = df_h[df_h["codigo_equipo"] == maq["codigo"]]
         st.dataframe(df_h_maq, use_container_width=True, hide_index=True)
+
+    # --- PESTAÑA 5: ASISTENTE IA (GEMINI) ---
+    with tab_ia:
+        st.subheader("🤖 Asistente IA — Gemini")
+        st.caption("Diagnóstico asistido y resumen automático del historial con inteligencia artificial.")
+
+        gemini_key = obtener_gemini_key()
+        if not gemini_key:
+            st.warning('⚠️ **Falta la API key de Gemini.** En tu computador crea el archivo `.streamlit/secrets.toml` con: `GEMINI_API_KEY = "tu-clave"`. En Streamlit Cloud: tu app → menú ⋮ (arriba a la derecha) → **Settings → Secrets**.')
+        else:
+            try:
+                from google import genai
+                cliente_ia = genai.Client(api_key=gemini_key)
+            except Exception as e:
+                cliente_ia = None
+                st.error(f"No se pudo cargar el SDK de Google (`google-genai`). Error: {e}")
+
+            if cliente_ia is not None:
+                pauta_ia = PAUTAS_MECANICAS.get(maq["categoria"], PAUTAS_MECANICAS["Maquinaria con Horómetro"])
+                pauta_txt = "\n".join(f"- {t}" for t in pauta_ia)
+
+                col_ia1, col_ia2 = st.columns(2)
+                with col_ia1:
+                    st.markdown("#### 🔍 Diagnóstico asistido")
+                    st.caption("Describe la falla y Gemini sugiere causas probables y qué revisar primero.")
+                    sintoma = st.text_area("Síntoma reportado (ej: 'pierde presión al acelerar'):", key="ia_sintoma")
+                    if st.button("🧠 Consultar a Gemini", use_container_width=True):
+                        if not sintoma.strip():
+                            st.warning("Escribe primero el síntoma.")
+                        else:
+                            prompt_diag = (
+                                "Eres un mecánico experto en maquinaria de arriendo para construcción en Chile.\n"
+                                f"Equipo: {maq['codigo']} — {maq['nombre']} (Categoría: {maq['categoria']}).\n"
+                                "Pauta de mantención de referencia de esta categoría:\n"
+                                f"{pauta_txt}\n\n"
+                                f"Síntoma reportado: \"{sintoma}\"\n\n"
+                                "Responde en español, conciso (máximo 180 palabras):\n"
+                                "1) Las 3 causas probables ordenadas por probabilidad.\n"
+                                "2) Qué revisar primero (puedes referirte a los ítems de la pauta).\n"
+                                "3) Repuestos o insumos probables a preparar."
+                            )
+                            try:
+                                with st.spinner("Gemini está analizando la falla..."):
+                                    resp_diag = cliente_ia.models.generate_content(model="gemini-flash-latest", contents=prompt_diag)
+                                st.success("Sugerencia de Gemini:")
+                                st.markdown(resp_diag.text)
+                            except Exception as e:
+                                st.error(f"Gemini no respondió: {e}")
+
+                with col_ia2:
+                    st.markdown("#### 📝 Resumen del historial")
+                    st.caption("Genera un resumen en lenguaje simple de todos los eventos de esta máquina.")
+                    if st.button("📄 Generar resumen IA", use_container_width=True):
+                        df_h_ia = obtener_historial()
+                        df_h_ia = df_h_ia[df_h_ia["codigo_equipo"] == maq["codigo"]]
+                        if df_h_ia.empty:
+                            st.info("Esta máquina aún no tiene eventos registrados.")
+                        else:
+                            filas = [f"- {r['fecha']} | {r['tipo_evento']} | {r['detalle']} | ${int(r['costo_repuestos']):,}".replace(",", ".") for _, r in df_h_ia.iterrows()]
+                            prompt_res = (
+                                f"Resume en máximo 3 líneas, en español, el historial de esta máquina de arriendo: {maq['codigo']} — {maq['nombre']}.\n"
+                                "Destaca fallas recurrentes, últimos trabajos y gastos. Sé directo.\n\n"
+                                "Historial (fecha | evento | detalle | costo):\n" + "\n".join(filas)
+                            )
+                            try:
+                                with st.spinner("Gemini está resumiendo..."):
+                                    resp_res = cliente_ia.models.generate_content(model="gemini-flash-latest", contents=prompt_res)
+                                st.success("Resumen de Gemini:")
+                                st.markdown(resp_res.text)
+                            except Exception as e:
+                                st.error(f"Gemini no respondió: {e}")
 
 # ==========================================
 # MÓDULO 2: SEMÁFORO DE PATIO (VISTA FLOTA)
