@@ -1,0 +1,16 @@
+# Base de datos local (se crea sola al primer arranque)
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Entornos virtuales
+venv/
+.env
+
+# Streamlit
+.streamlit/secrets.toml
