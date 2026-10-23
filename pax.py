@@ -5,46 +5,54 @@ import os
 from datetime import datetime
 
 # ==========================================
-# 1. CONFIGURACIÓN GENERAL DE LA APLICACIÓN
+# 1. CONFIGURACIÓN GENERAL Y DISEÑO
 # ==========================================
 st.set_page_config(
-    page_title="Rental Valdivia - Control de Flota NFC",
+    page_title="Rental Valdivia - Control Flota",
     page_icon="🚜",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
+# Estilo CSS personalizado para mejorar el look
+st.markdown("""
+    <style>
+    .stMetric { background-color: #f0f2f6; padding: 15px; border-radius: 10px; }
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] { border-radius: 5px 5px 0px 0px; padding: 10px 20px; }
+    </style>
+""", unsafe_allow_html=True)
+
 DB_NAME = "rental_valdivia.db"
 
-# Pautas mecánicas específicas por categoría de máquina
 PAUTAS_MECANICAS = {
     "Cortadora Orbital": [
         "Revisión y limpieza de carbones del motor eléctrico",
-        "Inspección de holgura en cabezal giratorio y mordazas de sujeción",
-        "Verificación de estado de portadisco y seguro de traba",
-        "Revisión de cableado blindado y enchufe industrial (Legrand/Mennekes)",
+        "Inspección de holgura en cabezal giratorio y mordazas",
+        "Verificación de estado de portadisco y seguro",
+        "Revisión de cableado blindado y enchufe industrial",
         "Engrase general de husillo y puntos móviles"
     ],
     "Unidad Motriz": [
         "Cambio de aceite de motor (15W-40) y revisión de fugas",
-        "Verificación de nivel y estado de aceite hidráulico / retorno",
-        "Limpieza o reemplazo de filtro de aire y revisión de bujía",
-        "Inspección de acoples rápidos hidráulicos (QDC) y mangueras de alta presión",
-        "Prueba de presión de trabajo y encendido en frío"
+        "Verificación de nivel de aceite hidráulico",
+        "Limpieza o reemplazo de filtro de aire y bujía",
+        "Inspección de acoples rápidos (QDC) y mangueras",
+        "Prueba de presión de trabajo y encendido"
     ],
     "Placa Compactadora": [
-        "Revisión de tensión y desgaste de correa centrífuga (embrague)",
-        "Verificación de nivel de aceite en unidad vibradora (excitador)",
-        "Inspección de silentblocks (gomas amortiguadoras) y chasis",
+        "Revisión de tensión de correa centrífuga (embrague)",
+        "Verificación de nivel de aceite en unidad vibradora",
+        "Inspección de silentblocks (gomas amortiguadoras)",
         "Limpieza de carburador y filtro de combustible",
-        "Ajuste de piola de aceleración y parada de emergencia"
+        "Ajuste de piola de aceleración"
     ],
     "Maquinaria con Horómetro": [
-        "Cambio de aceite de motor y filtro primario/secundario",
+        "Cambio de aceite de motor y filtros",
         "Revisión de sistema hidráulico, cilindros y sellos",
-        "Inspección de filtros de aire (primario y seguridad) y separador de agua",
+        "Inspección de filtros de aire (primario y seguridad)",
         "Engrase de pasadores, bujes y corona de giro",
-        "Verificación de sistema eléctrico, alternador y batería"
+        "Verificación de sistema eléctrico y batería"
     ]
 }
 
@@ -55,7 +63,6 @@ def inicializar_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     
-    # Tabla de Máquinas
     c.execute("""
         CREATE TABLE IF NOT EXISTS equipos (
             codigo TEXT PRIMARY KEY,
@@ -73,7 +80,6 @@ def inicializar_db():
         )
     """)
     
-    # Tabla de Historial (Recepciones y Mantenciones)
     c.execute("""
         CREATE TABLE IF NOT EXISTS historial (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -87,26 +93,15 @@ def inicializar_db():
         )
     """)
     
-    # Cargar datos de demostración si la base está vacía
     c.execute("SELECT COUNT(*) FROM equipos")
     if c.fetchone()[0] == 0:
         equipos_demo = [
             ("ORB-01", "Cortadora Orbital Tubos 6-12\"", "Cortadora Orbital", "Cara interna base mordaza", "DIAS", 14, 15, 0, "DISPONIBLE", 0, "Operativa. Próxima a revisión de carbones.", "2026-10-15 09:30"),
-            ("ORB-02", "Cortadora Orbital Alta Carga", "Cortadora Orbital", "Chasis inferior protegido", "DIAS", 16, 15, 0, "DISPONIBLE", 0, "Superó límite de 15 días de arriendo.", "2026-10-18 17:15"),
-            ("MOT-04", "Unidad Motriz Hidráulica 18 HP", "Unidad Motriz", "Ángulo interno jaula tubular", "DIAS", 22, 20, 0, "DISPONIBLE", 0, "Pide cambio de aceite y revisión de acoples.", "2026-10-17 18:00"),
             ("MOT-07", "Unidad Motriz Bencinera Honda", "Unidad Motriz", "Tras soporte filtro de aire", "DIAS", 8, 20, 0, "EN_PANA", 1, "Cliente reporta pérdida de presión en manguera.", "2026-10-19 11:20"),
-            ("PLC-12", "Placa Compactadora Reversible 160kg", "Placa Compactadora", "Base interior manillar", "DIAS", 5, 15, 0, "DISPONIBLE", 0, "Mantención recién hecha. Correa nueva.", "2026-10-16 12:00"),
-            ("EXC-02", "Miniexcavadora Yanmar ViO35", "Maquinaria con Horómetro", "Marco interior cabina izq.", "HORAS", 245, 250, 1495, "DISPONIBLE", 0, "Quedan 5 hrs para pauta de 1.500 hrs.", "2026-10-18 16:40"),
+            ("EXC-02", "Miniexcavadora Yanmar ViO35", "Maquinaria con Horómetro", "Marco interior cabina izq.", "HORAS", 245, 250, 1495, "DISPONIBLE", 0, "Quedan 5 hrs para pauta.", "2026-10-18 16:40"),
             ("GEN-08", "Generador Insonorizado 40 kVA", "Maquinaria con Horómetro", "Interior puerta panel control", "HORAS", 80, 250, 3080, "ARRENDADA", 0, "En faena forestal Camino a Niebla.", "2026-10-14 08:30")
         ]
         c.executemany("INSERT INTO equipos VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", equipos_demo)
-        
-        historial_demo = [
-            ("MOT-07", "2026-10-19 11:20", "RECEPCIÓN CON FALLA", "Bodega Patio", 4, 0, "Llegó con fuga en acople rápido hembra. Se bloquea equipo."),
-            ("PLC-12", "2026-10-16 12:00", "MANTENCIÓN TALLER", "Mecánico Juan P.", 0, 28500, "Cambio de correa centrífuga y aceite de excitador."),
-            ("MOT-04", "2026-10-17 18:00", "RECEPCIÓN NORMAL", "Bodega Patio", 6, 0, "Vuelve de faena en Paillaco sin daños visibles.")
-        ]
-        c.executemany("INSERT INTO historial (codigo_equipo, fecha, tipo_evento, responsable, uso_sumado, costo_repuestos, detalle) VALUES (?,?,?,?,?,?,?)", historial_demo)
         conn.commit()
     conn.close()
 
@@ -139,407 +134,300 @@ def obtener_gemini_key():
     except Exception:
         return os.environ.get("GEMINI_API_KEY", "")
 
-# Inicializar la base de datos al arrancar
 inicializar_db()
 df_equipos = obtener_equipos()
 df_equipos["semaforo"] = df_equipos.apply(calcular_semaforo, axis=1)
 
 # ==========================================
-# 3. LECTURA AUTOMÁTICA DE CHIP NFC (URL)
+# 3. LECTURA URL & BARRA LATERAL
 # ==========================================
-# Si el mecánico escanea el NFC (ej: http://.../app?equipo=MOT-04), la app lo detecta aquí
 params = st.query_params
 equipo_url = params.get("equipo", None)
 
-# ==========================================
-# 4. BARRA LATERAL Y NAVEGACIÓN
-# ==========================================
-st.sidebar.title("🚜 Rental Valdivia")
-st.sidebar.caption("Sistema de Control NFC & Mantención Preventiva")
+with st.sidebar:
+    try:
+        st.image("https://cdn-icons-png.flaticon.com/512/2883/2883907.png", width=80) # Icono decorativo
+    except Exception:
+        pass # Si no hay internet, la app sigue funcionando sin el icono
+    st.title("🚜 Rental Valdivia")
+    st.caption("Control NFC & Mantención")
+    st.divider()
+    
+    modo_vista = st.radio(
+        "Navegación:",
+        [
+            "📱 1. Escáner NFC / Ficha",
+            "🚦 2. Semáforo de Flota",
+            "📊 3. Panel Gerencial",
+            "➕ 4. Enrolar Máquina"
+        ]
+    )
+    
+    st.divider()
+    st.markdown("### 🔧 Simulador de Escáner")
+    lista_codigos = df_equipos["codigo"].tolist()
+    indice_default = lista_codigos.index(equipo_url) if equipo_url in lista_codigos else 0
+    equipo_seleccionado = st.selectbox("Simular lectura NFC:", lista_codigos, index=indice_default)
 
-modo_vista = st.sidebar.radio(
-    "Selecciona Módulo:",
-    [
-        "📱 1. Escáner NFC / Ficha Taller",
-        "🚦 2. Semáforo de Patio (Flota)",
-        "📊 3. Panel del Dueño (KPIs)",
-        "➕ 4. Agregar Máquina / Tag NFC"
-    ]
-)
-
-st.sidebar.divider()
-st.sidebar.markdown("### 💡 Simulador de Chip NFC")
-st.sidebar.caption("En la reunión, muestra cómo al tocar un chip NFC se abre directo la máquina:")
-lista_codigos = df_equipos["codigo"].tolist()
-indice_default = lista_codigos.index(equipo_url) if equipo_url in lista_codigos else 0
-equipo_seleccionado = st.sidebar.selectbox(
-    "Máquina escaneada:",
-    lista_codigos,
-    index=indice_default
-)
+    st.divider()
+    st.markdown("### 🤖 Asistente Mecánico (IA)")
+    api_key_gemini = st.text_input("API Key de Google Gemini:", value=obtener_gemini_key(), type="password", help="Se completa automática si está en los Secrets; si no, pégala manualmente.")
 
 # ==========================================
 # MÓDULO 1: ESCÁNER NFC Y OPERACIÓN EN PATIO
 # ==========================================
-if modo_vista == "📱 1. Escáner NFC / Ficha Taller":
+if modo_vista == "📱 1. Escáner NFC / Ficha":
     maq = df_equipos[df_equipos["codigo"] == equipo_seleccionado].iloc[0]
-    unidad = "días acumulados" if maq["tipo_medicion"] == "DIAS" else "horas desde última mant."
+    unidad = "días" if maq["tipo_medicion"] == "DIAS" else "hrs desde última mant."
     
-    st.title(f"🔧 {maq['codigo']} — {maq['nombre']}")
-    st.caption(f"📍 **Ubicación física del Chip NFC:** {maq['ubicacion_nfc']}  |  **Categoría:** {maq['categoria']}")
-
-    # Cartel gigante del Semáforo
+    st.title(f"Ficha Técnica: {maq['codigo']}")
+    st.subheader(f"{maq['nombre']}")
+    
     estado_actual = maq["semaforo"]
-    if "🔴" in estado_actual:
-        st.error(f"### {estado_actual}\n**Motivo / Última nota:** {maq['ultima_observacion']} *(PROHIBIDO ENTREGAR A CLIENTE)*")
-    elif "🟡" in estado_actual:
-        st.warning(f"### {estado_actual}\n**Desgaste acumulado:** {maq['uso_acumulado']} de {maq['limite_mantencion']} {unidad}. Requiere paso por taller antes de volver a salir.")
-    elif "🔵" in estado_actual:
-        st.info(f"### {estado_actual}\n**Nota:** {maq['ultima_observacion']}")
-    else:
-        st.success(f"### {estado_actual}\n**Desgaste acumulado:** {maq['uso_acumulado']} de {maq['limite_mantencion']} {unidad}. Máquina autorizada para despacho.")
-
-    # Métricas rápidas de la ficha
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Uso Acumulado (Ciclo)", f"{maq['uso_acumulado']} {maq['tipo_medicion'].lower()}", f"Límite: {maq['limite_mantencion']}")
-    porcentaje_desgaste = min(int((maq["uso_acumulado"] / maq["limite_mantencion"]) * 100), 100)
-    col2.metric("Nivel de Desgaste Preventivo", f"{porcentaje_desgaste}%")
-    col3.metric("Horómetro Motor", f"{maq['horometro_actual']} hrs" if maq["tipo_medicion"] == "HORAS" else "Sin Horómetro (Por Días)")
-    col4.metric("Última Actualización", maq["fecha_actualizacion"])
     
-    st.progress(porcentaje_desgaste / 100)
-    st.divider()
+    # Tarjeta de Estado
+    with st.container(border=True):
+        if "🔴" in estado_actual:
+            st.error(f"### {estado_actual}\n**Motivo:** {maq['ultima_observacion']}")
+        elif "🟡" in estado_actual:
+            st.warning(f"### {estado_actual}\n**Desgaste:** {maq['uso_acumulado']} / {maq['limite_mantencion']} {unidad}. Requiere taller.")
+        elif "🔵" in estado_actual:
+            st.info(f"### {estado_actual}\n**Nota:** {maq['ultima_observacion']}")
+        else:
+            st.success(f"### {estado_actual}\n**Desgaste:** {maq['uso_acumulado']} / {maq['limite_mantencion']} {unidad}. Lista para despacho.")
 
-    # Pestañas operativas de 15 segundos
-    tab_recepcion, tab_taller, tab_despacho, tab_hist, tab_ia = st.tabs([
-        "📥 1. Recepción de Arriendo (Patio)",
-        "🛠️ 2. Liberación de Taller (Mecánico)",
-        "🚚 3. Salida a Arriendo",
-        "📋 Historial del Equipo",
-        "🤖 Asistente IA (Gemini)"
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Uso Ciclo Actual", f"{maq['uso_acumulado']} {maq['tipo_medicion'].lower()}")
+        porcentaje = min(int((maq["uso_acumulado"] / maq["limite_mantencion"]) * 100), 100)
+        col2.metric("Desgaste Preventivo", f"{porcentaje}%")
+        col3.metric("Horómetro Total", f"{maq['horometro_actual']} hrs" if maq["tipo_medicion"] == "HORAS" else "N/A")
+        col4.metric("Ubicación Chip NFC", maq['ubicacion_nfc'])
+        
+        st.progress(porcentaje / 100, text="Nivel de desgaste hacia la próxima mantención preventiva")
+
+    # PESTAÑAS OPERATIVAS
+    tab_recepcion, tab_taller, tab_despacho, tab_admin, tab_hist = st.tabs([
+        "📥 Recepción", "🛠️ Taller e IA", "🚚 Despacho", "⚙️ Forzar Estado", "📋 Historial"
     ])
 
-    # --- PESTAÑA 1: RECEPCIÓN EN PATIO ---
+    # 1. RECEPCIÓN
     with tab_recepcion:
-        st.subheader("Recepción rápida al bajar de la camioneta")
-        with st.form("form_recepcion"):
+        with st.form("form_recepcion", border=True):
+            st.markdown("#### Registro de llegada desde Faena")
             c1, c2 = st.columns(2)
             with c1:
-                responsable_rec = st.text_input("Nombre de quien recibe:", value="Encargado de Patio")
+                responsable_rec = st.text_input("Recepcionado por:", value="Encargado de Patio")
                 if maq["tipo_medicion"] == "DIAS":
-                    uso_nuevo = st.number_input("¿Cuántos días estuvo arrendada en faena?", min_value=1, max_value=90, value=3)
+                    uso_nuevo = st.number_input("Días en terreno:", min_value=1, value=3)
                     nuevo_horometro = 0
                 else:
                     nuevo_horometro = st.number_input(
-                        f"Ingresa Horómetro actual (Anterior: {maq['horometro_actual']} hrs):",
-                        min_value=int(maq["horometro_actual"]),
-                        value=int(maq["horometro_actual"]) + 15
+                        f"Horómetro actual (Anterior: {maq['horometro_actual']}):",
+                        min_value=int(maq["horometro_actual"]), value=int(maq["horometro_actual"]) + 15
                     )
                     uso_nuevo = nuevo_horometro - int(maq["horometro_actual"])
                 
-                llego_con_falla = st.checkbox("⚠️ ¿Llegó con falla mecánica, golpe o piezas faltantes?")
-            
+                llego_con_falla = st.checkbox("⚠️ Llegó en Pana / Con Daños")
             with c2:
-                obs_recepcion = st.text_area("Observaciones de llegada (estado de cables, mangueras, disco, etc.):")
-                foto_evidencia = st.file_uploader("📸 Adjuntar foto de respaldo (si viene con daño del cliente):", type=["jpg", "png", "jpeg"])
-
-            guardar_rec = st.form_submit_button("💾 Guardar Recepción y Actualizar Semáforo", use_container_width=True)
+                obs_recepcion = st.text_area("Observaciones visuales:")
             
-            if guardar_rec:
+            if st.form_submit_button("💾 Guardar Recepción", type="primary", use_container_width=True):
                 ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
                 nuevo_uso_acum = int(maq["uso_acumulado"]) + int(uso_nuevo)
                 nuevo_estado = "EN_PANA" if llego_con_falla else "DISPONIBLE"
                 falla_flag = 1 if llego_con_falla else int(maq["falla_activa"])
-                horometro_final = nuevo_horometro if maq["tipo_medicion"] == "HORAS" else 0
+                horometro_final = nuevo_horometro if maq["tipo_medicion"] == "HORAS" else maq["horometro_actual"]
+                nota_final = obs_recepcion if obs_recepcion else "Recepción normal."
                 
-                nota_final = obs_recepcion if obs_recepcion else f"Recepción normal (+{uso_nuevo} {maq['tipo_medicion'].lower()})."
-                if foto_evidencia:
-                    nota_final += " [📸 Foto de daño guardada]"
-
                 conn = sqlite3.connect(DB_NAME)
                 c = conn.cursor()
-                c.execute("""
-                    UPDATE equipos 
-                    SET uso_acumulado=?, horometro_actual=?, estado_operativo=?, falla_activa=?, ultima_observacion=?, fecha_actualizacion=?
-                    WHERE codigo=?
-                """, (nuevo_uso_acum, horometro_final, nuevo_estado, falla_flag, nota_final, ahora, maq["codigo"]))
-                
-                tipo_ev = "RECEPCIÓN CON FALLA" if llego_con_falla else "RECEPCIÓN NORMAL"
-                c.execute("""
-                    INSERT INTO historial (codigo_equipo, fecha, tipo_evento, responsable, uso_sumado, costo_repuestos, detalle)
-                    VALUES (?,?,?,?,?,?,?)
-                """, (maq["codigo"], ahora, tipo_ev, responsable_rec, uso_nuevo, 0, nota_final))
+                c.execute("UPDATE equipos SET uso_acumulado=?, horometro_actual=?, estado_operativo=?, falla_activa=?, ultima_observacion=?, fecha_actualizacion=? WHERE codigo=?", 
+                          (nuevo_uso_acum, horometro_final, nuevo_estado, falla_flag, nota_final, ahora, maq["codigo"]))
+                c.execute("INSERT INTO historial (codigo_equipo, fecha, tipo_evento, responsable, uso_sumado, costo_repuestos, detalle) VALUES (?,?,?,?,?,?,?)",
+                          (maq["codigo"], ahora, "RECEPCIÓN", responsable_rec, uso_nuevo, 0, nota_final))
                 conn.commit()
                 conn.close()
-                st.success("✅ Recepción registrada correctamente.")
                 st.rerun()
 
-    # --- PESTAÑA 2: MANTENCIÓN EN TALLER ---
+    # 2. TALLER E IA MECÁNICA
     with tab_taller:
-        st.subheader(f"Pauta de Mantención — {maq['categoria']}")
-        st.write("Marca las tareas realizadas para reiniciar el contador preventivo y pasar la máquina a **🟢 VERDE**:")
+        col_pauta, col_ia = st.columns([1.5, 1])
         
-        pauta_actual = PAUTAS_MECANICAS.get(maq["categoria"], PAUTAS_MECANICAS["Maquinaria con Horómetro"])
-        tareas_marcadas = []
-        for tarea in pauta_actual:
-            if st.checkbox(tarea, key=f"chk_{tarea}"):
-                tareas_marcadas.append(tarea)
-        
-        st.markdown("---")
-        c1, c2 = st.columns(2)
-        with c1:
-            mecanico = st.text_input("Mecánico responsable:", value="Taller Central")
-            costo_rep = st.number_input("Costo estimado en repuestos/insumos ($ CLP):", min_value=0, step=5000, value=15000)
-        with c2:
-            detalle_ot = st.text_area("Trabajos adicionales o repuestos cambiados (ej. Bujía NGK, Aceite 15W-40, Carbones):")
-
-        if st.button("✅ Liberar Máquina (Reiniciar Contador y Pasar a VERDE)", type="primary", use_container_width=True):
-            ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
-            resumen_tareas = f"Pauta completada ({len(tareas_marcadas)}/{len(pauta_actual)} ítems). {detalle_ot}"
+        with col_pauta:
+            st.markdown("#### Pauta de Mantención")
+            pauta_actual = PAUTAS_MECANICAS.get(maq["categoria"], PAUTAS_MECANICAS["Maquinaria con Horómetro"])
+            tareas_marcadas = [tarea for tarea in pauta_actual if st.checkbox(tarea, key=f"chk_{tarea}")]
             
-            conn = sqlite3.connect(DB_NAME)
-            c = conn.cursor()
-            c.execute("""
-                UPDATE equipos 
-                SET uso_acumulado=0, estado_operativo='DISPONIBLE', falla_activa=0, ultima_observacion=?, fecha_actualizacion=?
-                WHERE codigo=?
-            """, (f"Mantención OK por {mecanico}: {resumen_tareas}", ahora, maq["codigo"]))
-            
-            c.execute("""
-                INSERT INTO historial (codigo_equipo, fecha, tipo_evento, responsable, uso_sumado, costo_repuestos, detalle)
-                VALUES (?,?,?,?,?,?,?)
-            """, (maq["codigo"], ahora, "MANTENCIÓN TALLER", mecanico, 0, costo_rep, resumen_tareas))
-            conn.commit()
-            conn.close()
-            st.success("🟢 ¡Máquina liberada y lista para arriendo!")
-            st.rerun()
+            with st.expander("Finalizar y Liberar Máquina", expanded=True):
+                mecanico = st.text_input("Mecánico responsable:", value="Taller Central")
+                costo_rep = st.number_input("Costo de Repuestos ($ CLP):", min_value=0, step=1000)
+                detalle_ot = st.text_area("Detalle de trabajos y repuestos:")
+                
+                if st.button("✅ Liberar a Patio (Pasar a VERDE)", use_container_width=True):
+                    ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    conn = sqlite3.connect(DB_NAME)
+                    c = conn.cursor()
+                    c.execute("UPDATE equipos SET uso_acumulado=0, estado_operativo='DISPONIBLE', falla_activa=0, ultima_observacion=?, fecha_actualizacion=? WHERE codigo=?", 
+                              (f"Mantención OK: {detalle_ot}", ahora, maq["codigo"]))
+                    c.execute("INSERT INTO historial (codigo_equipo, fecha, tipo_evento, responsable, uso_sumado, costo_repuestos, detalle) VALUES (?,?,?,?,?,?,?)",
+                              (maq["codigo"], ahora, "MANTENCIÓN TALLER", mecanico, 0, costo_rep, detalle_ot))
+                    conn.commit()
+                    conn.close()
+                    st.rerun()
 
-    # --- PESTAÑA 3: SALIDA A ARRIENDO ---
+        with col_ia:
+            with st.container(border=True):
+                st.markdown("#### 🤖 Consulta al Manual (IA)")
+                st.caption(f"Pregunta sobre {maq['categoria']}.")
+                duda = st.text_area("Ej: ¿Cómo calibrar el carburador?", height=100)
+                
+                if st.button("Consultar a Gemini", use_container_width=True):
+                    if not api_key_gemini:
+                        st.error("Por favor, ingresa tu API Key en la barra lateral.")
+                    elif duda:
+                        with st.spinner("Consultando manuales..."):
+                            try:
+                                from google import genai
+                                cliente_ia = genai.Client(api_key=api_key_gemini)
+                                prompt = f"Eres un mecánico experto en maquinaria pesada y ligera. Un colega te pregunta sobre una {maq['categoria']} (Modelo: {maq['nombre']}): {duda}. Responde de forma técnica, directa, paso a paso y en español chileno."
+                                response = cliente_ia.models.generate_content(model="gemini-flash-latest", contents=prompt)
+                                st.info(response.text)
+                            except Exception as e:
+                                st.error(f"Error de conexión con la IA: {e}")
+
+    # 3. DESPACHO
     with tab_despacho:
-        st.subheader("Despacho a Cliente / Faena")
-        if "🔴" in estado_actual or "🟡" in estado_actual:
-            st.error("⛔ **ALERTA DE CONTROL:** Esta máquina está en ROJO o AMARILLO. No debería salir a terreno sin autorización de taller.")
-        
-        cliente_faena = st.text_input("Nombre del Cliente / Obra (ej. Constructora Austral - Faena Niebla):")
-        despachador = st.text_input("Despachado por:", value="Mesón Arriendo")
-        if st.button("🚚 Registrar Salida a Terreno", use_container_width=True):
-            ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
-            conn = sqlite3.connect(DB_NAME)
-            c = conn.cursor()
-            c.execute("""
-                UPDATE equipos SET estado_operativo='ARRENDADA', ultima_observacion=?, fecha_actualizacion=? WHERE codigo=?
-            """, (f"En arriendo: {cliente_faena}", ahora, maq["codigo"]))
-            c.execute("""
-                INSERT INTO historial (codigo_equipo, fecha, tipo_evento, responsable, uso_sumado, costo_repuestos, detalle)
-                VALUES (?,?,?,?,?,?,?)
-            """, (maq["codigo"], ahora, "SALIDA A ARRIENDO", despachador, 0, 0, f"Entregada a cliente: {cliente_faena}"))
-            conn.commit()
-            conn.close()
-            st.rerun()
+        with st.container(border=True):
+            st.markdown("#### Autorización de Salida")
+            if "🔴" in estado_actual or "🟡" in estado_actual:
+                st.error("⛔ ALERTA: Esta máquina requiere taller. Despachar bajo su propio riesgo.")
+            cliente = st.text_input("Cliente / Obra destino:")
+            
+            if st.button("🚚 Registrar Salida (Pasar a AZUL)", use_container_width=True):
+                if cliente:
+                    ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    conn = sqlite3.connect(DB_NAME)
+                    c = conn.cursor()
+                    c.execute("UPDATE equipos SET estado_operativo='ARRENDADA', ultima_observacion=?, fecha_actualizacion=? WHERE codigo=?", 
+                              (f"Arrendada a: {cliente}", ahora, maq["codigo"]))
+                    c.execute("INSERT INTO historial (codigo_equipo, fecha, tipo_evento, responsable, uso_sumado, costo_repuestos, detalle) VALUES (?,?,?,?,?,?,?)",
+                              (maq["codigo"], ahora, "SALIDA", "Mesón", 0, 0, f"A cliente: {cliente}"))
+                    conn.commit()
+                    conn.close()
+                    st.rerun()
+                else:
+                    st.warning("Falta indicar el cliente.")
 
-    # --- PESTAÑA 4: HISTORIAL DEL EQUIPO ---
+    # 4. FORZAR ESTADO (ADMIN)
+    with tab_admin:
+        with st.container(border=True):
+            st.markdown("#### ⚙️ Corrección Manual de Estado")
+            st.caption("Usa esto solo si hubo un error de digitación. No suma historial de horas ni costos.")
+            nuevo_estado_manual = st.selectbox("Selecciona el estado real del equipo:", ["DISPONIBLE", "EN_PANA", "ARRENDADA"])
+            quitar_falla = st.checkbox("Remover bandera de falla/daño (Dejar máquina limpia)")
+            
+            if st.button("Aplicar Cambio Forzado"):
+                falla_val = 0 if quitar_falla else maq["falla_activa"]
+                if nuevo_estado_manual == "EN_PANA": falla_val = 1
+                
+                conn = sqlite3.connect(DB_NAME)
+                c = conn.cursor()
+                c.execute("UPDATE equipos SET estado_operativo=?, falla_activa=? WHERE codigo=?", (nuevo_estado_manual, falla_val, maq["codigo"]))
+                conn.commit()
+                conn.close()
+                st.success("Estado corregido. Actualizando...")
+                st.rerun()
+
+    # 5. HISTORIAL
     with tab_hist:
         df_h = obtener_historial()
-        df_h_maq = df_h[df_h["codigo_equipo"] == maq["codigo"]]
-        st.dataframe(df_h_maq, use_container_width=True, hide_index=True)
+        st.dataframe(df_h[df_h["codigo_equipo"] == maq["codigo"]], use_container_width=True, hide_index=True)
 
-    # --- PESTAÑA 5: ASISTENTE IA (GEMINI) ---
-    with tab_ia:
-        st.subheader("🤖 Asistente IA — Gemini")
-        st.caption("Diagnóstico asistido y resumen automático del historial con inteligencia artificial.")
-
-        gemini_key = obtener_gemini_key()
-        if not gemini_key:
-            st.warning('⚠️ **Falta la API key de Gemini.** En tu computador crea el archivo `.streamlit/secrets.toml` con: `GEMINI_API_KEY = "tu-clave"`. En Streamlit Cloud: tu app → menú ⋮ (arriba a la derecha) → **Settings → Secrets**.')
-        else:
-            try:
-                from google import genai
-                cliente_ia = genai.Client(api_key=gemini_key)
-            except Exception as e:
-                cliente_ia = None
-                st.error(f"No se pudo cargar el SDK de Google (`google-genai`). Error: {e}")
-
-            if cliente_ia is not None:
-                pauta_ia = PAUTAS_MECANICAS.get(maq["categoria"], PAUTAS_MECANICAS["Maquinaria con Horómetro"])
-                pauta_txt = "\n".join(f"- {t}" for t in pauta_ia)
-
-                col_ia1, col_ia2 = st.columns(2)
-                with col_ia1:
-                    st.markdown("#### 🔍 Diagnóstico asistido")
-                    st.caption("Describe la falla y Gemini sugiere causas probables y qué revisar primero.")
-                    sintoma = st.text_area("Síntoma reportado (ej: 'pierde presión al acelerar'):", key="ia_sintoma")
-                    if st.button("🧠 Consultar a Gemini", use_container_width=True):
-                        if not sintoma.strip():
-                            st.warning("Escribe primero el síntoma.")
-                        else:
-                            prompt_diag = (
-                                "Eres un mecánico experto en maquinaria de arriendo para construcción en Chile.\n"
-                                f"Equipo: {maq['codigo']} — {maq['nombre']} (Categoría: {maq['categoria']}).\n"
-                                "Pauta de mantención de referencia de esta categoría:\n"
-                                f"{pauta_txt}\n\n"
-                                f"Síntoma reportado: \"{sintoma}\"\n\n"
-                                "Responde en español, conciso (máximo 180 palabras):\n"
-                                "1) Las 3 causas probables ordenadas por probabilidad.\n"
-                                "2) Qué revisar primero (puedes referirte a los ítems de la pauta).\n"
-                                "3) Repuestos o insumos probables a preparar."
-                            )
-                            try:
-                                with st.spinner("Gemini está analizando la falla..."):
-                                    resp_diag = cliente_ia.models.generate_content(model="gemini-flash-latest", contents=prompt_diag)
-                                st.success("Sugerencia de Gemini:")
-                                st.markdown(resp_diag.text)
-                            except Exception as e:
-                                st.error(f"Gemini no respondió: {e}")
-
-                with col_ia2:
-                    st.markdown("#### 📝 Resumen del historial")
-                    st.caption("Genera un resumen en lenguaje simple de todos los eventos de esta máquina.")
-                    if st.button("📄 Generar resumen IA", use_container_width=True):
-                        df_h_ia = obtener_historial()
-                        df_h_ia = df_h_ia[df_h_ia["codigo_equipo"] == maq["codigo"]]
-                        if df_h_ia.empty:
-                            st.info("Esta máquina aún no tiene eventos registrados.")
-                        else:
-                            filas = [f"- {r['fecha']} | {r['tipo_evento']} | {r['detalle']} | ${int(r['costo_repuestos']):,}".replace(",", ".") for _, r in df_h_ia.iterrows()]
-                            prompt_res = (
-                                f"Resume en máximo 3 líneas, en español, el historial de esta máquina de arriendo: {maq['codigo']} — {maq['nombre']}.\n"
-                                "Destaca fallas recurrentes, últimos trabajos y gastos. Sé directo.\n\n"
-                                "Historial (fecha | evento | detalle | costo):\n" + "\n".join(filas)
-                            )
-                            try:
-                                with st.spinner("Gemini está resumiendo..."):
-                                    resp_res = cliente_ia.models.generate_content(model="gemini-flash-latest", contents=prompt_res)
-                                st.success("Resumen de Gemini:")
-                                st.markdown(resp_res.text)
-                            except Exception as e:
-                                st.error(f"Gemini no respondió: {e}")
 
 # ==========================================
 # MÓDULO 2: SEMÁFORO DE PATIO (VISTA FLOTA)
 # ==========================================
-elif modo_vista == "🚦 2. Semáforo de Patio (Flota)":
-    st.title("🚦 Semáforo de Patio en Tiempo Real")
-    st.write("Vista rápida para que mesón de ventas y jefe de taller sepan qué máquina se puede entregar y cuál debe entrar a banco de pruebas.")
-
-    # Contadores rápidos
-    total_maq = len(df_equipos)
-    verdes = len(df_equipos[df_equipos["semaforo"].str.contains("🟢")])
-    amarillas = len(df_equipos[df_equipos["semaforo"].str.contains("🟡")])
-    rojas = len(df_equipos[df_equipos["semaforo"].str.contains("🔴")])
-    arrendadas = len(df_equipos[df_equipos["semaforo"].str.contains("🔵")])
-
-    m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric("Total Equipos", total_maq)
-    m2.metric("🟢 Listas para Arriendo", verdes)
-    m3.metric("🟡 Piden Mantención", amarillas)
-    m4.metric("🔴 En Pana / Bloqueadas", rojas)
-    m5.metric("🔵 En Faena (Arrendadas)", arrendadas)
-
+elif modo_vista == "🚦 2. Semáforo de Flota":
+    st.title("🚦 Vista de Patio y Semáforo")
+    
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("🟢 Operativas", len(df_equipos[df_equipos["semaforo"].str.contains("🟢")]))
+    c2.metric("🟡 Prevención", len(df_equipos[df_equipos["semaforo"].str.contains("🟡")]))
+    c3.metric("🔴 En Pana", len(df_equipos[df_equipos["semaforo"].str.contains("🔴")]))
+    c4.metric("🔵 En Terreno", len(df_equipos[df_equipos["semaforo"].str.contains("🔵")]))
+    
     st.divider()
-
-    # Filtros pensados para buscar entre 3.000 máquinas
-    f1, f2, f3 = st.columns(3)
+    f1, f2 = st.columns([1, 2])
     with f1:
-        filtro_sem = st.multiselect("Filtrar por Estado del Semáforo:", df_equipos["semaforo"].unique(), default=df_equipos["semaforo"].unique())
+        filtro_sem = st.multiselect("Filtrar Estado:", df_equipos["semaforo"].unique(), default=df_equipos["semaforo"].unique())
     with f2:
-        filtro_cat = st.multiselect("Filtrar por Categoría:", df_equipos["categoria"].unique(), default=df_equipos["categoria"].unique())
-    with f3:
-        busqueda = st.text_input("🔍 Buscar por código o nombre (ej. ORB-01, Motriz):")
+        busqueda = st.text_input("🔍 Buscar por Código o Nombre:")
 
-    df_filtrado = df_equipos[
-        (df_equipos["semaforo"].isin(filtro_sem)) &
-        (df_equipos["categoria"].isin(filtro_cat))
-    ]
+    df_filt = df_equipos[df_equipos["semaforo"].isin(filtro_sem)]
     if busqueda:
-        df_filtrado = df_filtrado[
-            df_filtrado["codigo"].str.contains(busqueda, case=False) |
-            df_filtrado["nombre"].str.contains(busqueda, case=False)
-        ]
+        df_filt = df_filt[df_filt["codigo"].str.contains(busqueda, case=False) | df_filt["nombre"].str.contains(busqueda, case=False)]
 
+    # Mostrar tabla con formato pulido
     st.dataframe(
-        df_filtrado[["codigo", "semaforo", "nombre", "categoria", "uso_acumulado", "limite_mantencion", "tipo_medicion", "ubicacion_nfc", "ultima_observacion"]],
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "codigo": "Código",
-            "semaforo": "Estado Semáforo",
-            "nombre": "Equipo",
-            "categoria": "Familia",
-            "uso_acumulado": "Uso Acumulado",
-            "limite_mantencion": "Límite Pauta",
-            "tipo_medicion": "Control por",
-            "ubicacion_nfc": "Ubicación Chip NFC",
-            "ultima_observacion": "Último Reporte"
-        }
+        df_filt[["codigo", "nombre", "semaforo", "categoria", "uso_acumulado"]],
+        use_container_width=True, hide_index=True
     )
 
 # ==========================================
 # MÓDULO 3: PANEL DEL DUEÑO (KPIs Y COSTOS)
 # ==========================================
-elif modo_vista == "📊 3. Panel del Dueño (KPIs)":
-    st.title("📊 Control Gerencial y Rentabilidad de Flota")
-    st.write("Indicadores clave para toma de decisiones, control de gastos en repuestos y detección de equipos críticos.")
-
+elif modo_vista == "📊 3. Panel Gerencial":
+    st.title("📊 Rentabilidad y KPIs de Flota")
     df_hist = obtener_historial()
-    disponibilidad = round(((len(df_equipos) - len(df_equipos[df_equipos["semaforo"].str.contains("🔴")])) / len(df_equipos)) * 100, 1)
-    gasto_total_repuestos = df_hist["costo_repuestos"].sum()
-    total_panas = len(df_hist[df_hist["tipo_evento"] == "RECEPCIÓN CON FALLA"])
-
-    k1, k2, k3 = st.columns(3)
-    k1.metric("Disponibilidad Mecánica de Flota", f"{disponibilidad}%", "Meta ideal: mayor a 90%")
-    k2.metric("Gasto Acumulado en Repuestos (Taller)", f"${gasto_total_repuestos:,.0f} CLP".replace(",", "."))
-    k3.metric("Equipos Recibidos con Falla / Daño", f"{total_panas} eventos")
-
-    st.divider()
-    col_g1, col_g2 = st.columns(2)
-
-    with col_g1:
-        st.subheader("🔧 Gasto en Mantención por Máquina ($ CLP)")
-        gasto_por_maq = df_hist.groupby("codigo_equipo")["costo_repuestos"].sum().reset_index()
-        st.bar_chart(gasto_por_maq.set_index("codigo_equipo"))
-
-    with col_g2:
-        st.subheader("📈 Nivel de Desgaste Acumulado vs. Límite")
-        df_chart = df_equipos[["codigo", "uso_acumulado", "limite_mantencion"]].set_index("codigo")
-        st.bar_chart(df_chart)
-
-    st.subheader("📥 Descargar Reporte Completo para Excel")
-    csv = df_hist.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        label="📊 Descargar Historial de Mantenciones y Recepciones (.CSV / Excel)",
-        data=csv,
-        file_name="historial_mantencion_rental_valdivia.csv",
-        mime="text/csv"
-    )
+    
+    try:
+        disp = round(((len(df_equipos) - len(df_equipos[df_equipos["semaforo"].str.contains("🔴")])) / len(df_equipos)) * 100, 1)
+    except:
+        disp = 100
+        
+    gasto = df_hist["costo_repuestos"].sum()
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        st.metric("🔧 Disponibilidad Mecánica (Target: >90%)", f"{disp}%")
+        st.metric("💸 Gasto Acumulado Repuestos", f"${gasto:,.0f} CLP")
+    
+    with c2:
+        if not df_hist.empty:
+            costos_por_tipo = df_hist.groupby("tipo_evento")["costo_repuestos"].sum().reset_index()
+            st.bar_chart(costos_por_tipo.set_index("tipo_evento"))
+            
+    st.download_button("📥 Exportar Todo el Historial (CSV)", data=df_hist.to_csv(index=False).encode("utf-8"), file_name="kpi_rental.csv")
 
 # ==========================================
-# MÓDULO 4: AGREGAR NUEVA MÁQUINA Y LINK NFC
+# MÓDULO 4: AGREGAR NUEVA MÁQUINA
 # ==========================================
-elif modo_vista == "➕ 4. Agregar Máquina / Tag NFC":
-    st.title("➕ Enrolar Nueva Máquina al Sistema NFC")
-    with st.form("nuevo_equipo"):
-        c1, c2 = st.columns(2)
-        with c1:
-            nuevo_cod = st.text_input("Código Interno (ej. ORB-05, MOT-12):").upper().strip()
-            nuevo_nom = st.text_input("Nombre / Modelo del Equipo:")
-            nueva_cat = st.selectbox("Categoría de Pauta:", list(PAUTAS_MECANICAS.keys()))
-        with c2:
-            nuevo_tipo = st.selectbox("Método de Control de Desgaste:", ["DIAS", "HORAS"])
-            nuevo_lim = st.number_input("Límite para Mantención Preventiva (Días o Horas):", min_value=5, max_value=1000, value=15)
-            nueva_ubic = st.text_input("Dónde se instalará el Chip NFC (ej. Interior jaula motor):")
-
-        if st.form_submit_button("Registrar Máquina y Generar Enlace NFC"):
-            if nuevo_cod and nuevo_nom:
-                ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
-                conn = sqlite3.connect(DB_NAME)
-                c = conn.cursor()
-                try:
-                    c.execute("INSERT INTO equipos VALUES (?,?,?,?,?,?,?,0,'DISPONIBLE',0,'Recién enrolada en sistema.',?)",
-                              (nuevo_cod, nuevo_nom, nueva_cat, nueva_ubic, nuevo_tipo, 0, nuevo_lim, ahora))
-                    conn.commit()
-                    st.success(f"✅ Máquina {nuevo_cod} creada con éxito.")
-                    st.info(f"📲 **Enlace para grabar en el Chip NFC con la app 'NFC Tools':**\n`http://TU-IP-O-DOMINIO:8501/?equipo={nuevo_cod}`")
-                except sqlite3.IntegrityError:
-                    st.error("❌ Ese código de máquina ya existe.")
-                finally:
-                    conn.close()
+elif modo_vista == "➕ 4. Enrolar Máquina":
+    st.title("➕ Enrolar Equipo y Generar NFC")
+    with st.container(border=True):
+        with st.form("nuevo_equipo"):
+            c1, c2 = st.columns(2)
+            with c1:
+                nuevo_cod = st.text_input("Código Interno (Ej: ORB-05):").upper().strip()
+                nuevo_nom = st.text_input("Modelo/Descripción:")
+                nueva_cat = st.selectbox("Pauta Técnica:", list(PAUTAS_MECANICAS.keys()))
+            with c2:
+                nuevo_tipo = st.selectbox("Control por:", ["DIAS", "HORAS"])
+                nuevo_lim = st.number_input("Límite Preventivo:", min_value=1, value=15)
+                nueva_ubic = st.text_input("Ubicación física del Tag NFC:")
+                
+            if st.form_submit_button("Crear y Generar Link NFC", type="primary"):
+                if nuevo_cod and nuevo_nom:
+                    ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    conn = sqlite3.connect(DB_NAME)
+                    c = conn.cursor()
+                    try:
+                        c.execute("INSERT INTO equipos VALUES (?,?,?,?,?,0,?,0,'DISPONIBLE',0,'Recién enrolada.',?)",
+                                  (nuevo_cod, nuevo_nom, nueva_cat, nueva_ubic, nuevo_tipo, nuevo_lim, ahora))
+                        conn.commit()
+                        st.success(f"✅ Equipo {nuevo_cod} enrolado correctamente.")
+                        st.code(f"https://TU-APP.streamlit.app/?equipo={nuevo_cod}", language="markdown")
+                    except sqlite3.IntegrityError:
+                        st.error("❌ Código ya existe.")
+                    finally:
+                        conn.close()
